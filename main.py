@@ -4,8 +4,6 @@ import subprocess
 import json
 from flet import *
 import threading
-from fastapi import FastAPI, WebSocket
-import asyncio
 
 ## Gerando  o vídeo
 suno_prompts = ["lofi chill beats"]
@@ -70,65 +68,39 @@ def VideoMetaData(video_path, thumbnail_path, path = 'media', privacity=0, categ
             json.dump(json_, js, indent=4)
             print(js.name)
             return js.name
-
-fastapi = FastAPI()
-
-@fastapi.websocket('/ws')
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    
-    def consent_url(value):
-        text_consent_url.value = f"URL: {value}"
-        text_consent_url.page.update()
-    
-    def progress_bar(value):
-        bar_upload_progress.value = round(float(value),2)
-        bar_upload_progress.page.update()
-    
-    actions = {"url": consent_url, "progress": progress_bar}
-    while True:
-        try:
-            message = await websocket.receive_text()
-            data = json.loads(message)
-            actions[data["type"]](data['data'])
         
-        except Exception as e:
-            print(f"Error in websocket:\n\n{e}")
-    
 upload_process = None
-bar_upload_progress = ProgressBar(value = 0)
-text_consent_url = Text(" ")
 
-def flet_main(page: Page):
-
-        
+def main(page: Page):
     def metadata(e):
-        #video_path = "/workspaces/lofi-video-poster/video/output_final.mp4" # Teste para caso tudo dê errado
+        loading = ProgressBar()
+        page.add(loading)
+        button_gen_metadata.disabled = True
         try:
             if colunm_metadata:
                 page.remove(colunm_metadata)
         except:
             pass
-        response = VideoMetaData(video_path=textField_video_path.value,thumbnail_path=textField_thumbnail_path.value, privacity=0,prompt = desc_prompts[1], channel_video_id = example_video_of_channel[0], my_channel = my_channel[0])
-        text_videoData = Text(
-        value= JsonReader('media/response.json')
-        )
-        
+        response = VideoMetaData(video_path=textField_video_path.value, thumbnail_path=textField_thumbnail_path.value, privacity=0, prompt=desc_prompts[1], channel_video_id=example_video_of_channel[0], my_channel=my_channel[0])
+        text_videoData = Text(value=JsonReader('media/response.json'))
+
         if response:
+            page.remove(loading)
+            button_gen_metadata.disabled = False
             button_upload.disabled = False
             colunm_metadata = Column([text_videoData, Divider(), button_upload], scroll="always", expand=True)
             page.add(colunm_metadata)
             page.update()
-    
+
     def upload(e):
         global upload_process
         def run_upload():
             global upload_process
-            page.clean() #Limpa tela
+            page.clean()
             text_title = Text("Upload Page")
-            upload_page = Column([text_title, bar_upload_progress , Divider(), button_cancel_upload], scroll="always", expand=True)
+            upload_page = Column([text_title, ProgressRing(), Divider(), button_cancel_upload], scroll="always", expand=True)
             page.add(upload_page)
-            page.update()            
+            page.update()
             upload_process = subprocess.Popen(["node", "upload.js"])
             upload_process.wait()
             page.clean()
@@ -137,68 +109,99 @@ def flet_main(page: Page):
             page.update()
             page.add(inputs)
             page.update()
-        
+
         upload_thread = threading.Thread(target=run_upload)
         upload_thread.start()
-            
+
     def cancel_upload(e):
         global upload_process
-        
+
         if upload_process:
             upload_process.terminate()
-            page.overlay.append(SnackBar(content=Text("Upload Complete"), open=True))
+            page.overlay.append(SnackBar(content=Text("Upload Cancelled"), open=True))
             page.update()
             page.clean()
             page.add(inputs)
             page.update()
-                    
 
     def on_text_change(e):
         if textField_video_path.value and textField_thumbnail_path.value:
             button_gen_metadata.disabled = False
         page.update()
+
+    def pick_video(e):
+        allower_extensions = ['mp4','avi','mpeg','webm','gif']
+        file_picker_video.pick_files(allow_multiple=False, allowed_extensions=allower_extensions)
+
+    def pick_thumbnail(e):
+        allower_extensions = ['jpg','png','jpeg','webp']
+        file_picker_thumbnail.pick_files(allow_multiple=False, allowed_extensions=allower_extensions)
     
-    textField_video_path = TextField(
-        label="Video Path",
-        multiline=False,
-        on_change= on_text_change
+    def on_video_picked(e):
+        if file_picker_video.result:
+            textField_video_path.value = file_picker_video.result.files[0].path
+            textField_video_path.page.update()
+            on_text_change(e)
+
+    def on_thumbnail_picked(e):
+        if file_picker_thumbnail.result:
+            textField_thumbnail_path.value = file_picker_thumbnail.result.files[0].path
+            textField_thumbnail_path.page.update()
+            on_text_change(e)
+           
+
+    textField_video_path = Text(
+        value=None,
     )
-    
-    textField_thumbnail_path = TextField(
-        label="Thumb Path",
-        multiline=False,
-        on_change= on_text_change
+
+    textField_thumbnail_path = Text(
+        value=None,
     )
-    
+
     button_gen_metadata = Button(
-        text= "Generate Metadata",
-        on_click= metadata,
-        disabled= True,
+        text="Generate Metadata",
+        on_click=metadata,
+        disabled=True,
+        icon=Icons.AUTORENEW
     )
-    
+
     button_upload = Button(
-        text= "Upload to Youtube",
-        on_click= upload,
+        text="Upload to Youtube",
+        on_click=upload,
+        icon=Icons.UPLOAD_FILE
     )
-    
+
     button_cancel_upload = Button(
-        text='Cancel', 
-        on_click=cancel_upload
-        )
-    
-    
-    inputs = Column(
-        [textField_video_path, textField_thumbnail_path, button_gen_metadata, Divider()],
+        text='Cancel',
+        on_click=cancel_upload,
+        icon=Icons.CANCEL
     )
-    
+
+    file_picker_video = FilePicker(on_result=on_video_picked)
+    file_picker_thumbnail = FilePicker(on_result=on_thumbnail_picked)
+
+    pick_video_button = Button(
+        text="Select Video",
+        icon=Icons.VIDEO_FILE,
+        on_click=pick_video
+    )
+
+    pick_thumbnail_button = Button(
+        text="Select Thumbnail",
+        icon=Icons.IMAGE,
+        on_click=pick_thumbnail
+    )
+
+    inputs = Column(
+        [pick_video_button, textField_video_path, pick_thumbnail_button, textField_thumbnail_path, button_gen_metadata, Divider()],
+    )
+
+    page.overlay.append(file_picker_video)
+    page.overlay.append(file_picker_thumbnail)
     page.add(inputs)
-    
+
     page.update()
-    
-if __name__ =='__main__':
-    from multiprocessing import Process
-    import uvicorn
-    
-    flet_process = Process(target=app, args=(flet_main,))
-    flet_process.start()
-    uvicorn.run(fastapi, host='0.0.0.0',port=8000)
+
+if __name__ == '__main__':
+    app(target=main, port=8000)
+
