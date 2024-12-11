@@ -4,11 +4,7 @@ const google = require('googleapis').google
 const youtube = google.youtube({ version: 'v3' })
 const path = require('path')
 const OAuth2 = google.auth.OAuth2
-const WebSocket = require("ws");
-const ws = new WebSocket('ws://localhost:8000/ws')
 
-ws.onopen = () => {
-    console.log("Conectado ao WebSocket!");}
 
 async function robot()
 {
@@ -59,15 +55,6 @@ async function robot()
             })
 
             console.log(`> Please Give You Consent: ${consentUrl}`)
-            const urlMessage = JSON.stringify({
-                type: "url",
-                data: consentUrl
-            })
-            ws.onopen = () => {
-                ws.send(urlMessage)
-                console.log("Consent URL sent to the client")
-            }
-            
         }
 
         async function waitForGoogleCallback(webServer){
@@ -158,15 +145,7 @@ async function robot()
         function onUploadProgress(event){
             const progress = Math.round((event.bytesRead / videoFileSize) * 100)
             console.log(`> ${progress}% completed`)
-
-            const progress_message = JSON.stringify({
-                type: progress,
-                data: progress
-            })
-            ws.onopen = ()=> {
-                ws.send(progress_message)
-            }
-        } 
+        }
     }
 
     async function SetThumbnail(videoInformation, content){
